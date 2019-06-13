@@ -95,6 +95,9 @@ export type Props<T> = {|
   style?: Object,
   useIsScrolling: boolean,
   width: number,
+  stickyRowsClassNamePrefix?: string,
+  stickyRowsElementType?: React$ElementType,
+  stickyRows?: Array<number>,
 |};
 
 type State = {|
@@ -405,6 +408,9 @@ export default function createGridComponent({
         style,
         useIsScrolling,
         width,
+        stickyRowsClassNamePrefix,
+        stickyRowsElementType,
+        stickyRows = [],
       } = this.props;
       const { isScrolling } = this.state;
 
@@ -415,12 +421,17 @@ export default function createGridComponent({
       const [rowStartIndex, rowStopIndex] = this._getVerticalRangeToRender();
 
       const items = [];
+      const stickyRowItems = [];
+
       if (columnCount > 0 && rowCount) {
         for (
           let rowIndex = rowStartIndex;
           rowIndex <= rowStopIndex;
           rowIndex++
         ) {
+          // Remove the sticky rows from main list
+          let rowIdx = getRowIndex(rowIndex, stickyRows);
+
           for (
             let columnIndex = columnStartIndex;
             columnIndex <= columnStopIndex;
@@ -431,11 +442,47 @@ export default function createGridComponent({
                 columnIndex,
                 data: itemData,
                 isScrolling: useIsScrolling ? isScrolling : undefined,
-                key: itemKey({ columnIndex, data: itemData, rowIndex }),
-                rowIndex,
-                style: this._getItemStyle(rowIndex, columnIndex),
+                key: itemKey({ columnIndex, data: itemData, rowIndex: rowIdx }),
+                rowIndex: rowIdx,
+                style: this._getItemStyle(
+                  rowIndex + stickyRows.length,
+                  columnIndex
+                ),
               })
             );
+          }
+        }
+
+        if (stickyRows.length) {
+          for (
+            let stickRowIndex = 0;
+            stickRowIndex < stickyRows.length;
+            stickRowIndex++
+          ) {
+            let stickyRowColumns = [];
+
+            for (
+              let columnIndex = columnStartIndex;
+              columnIndex <= columnStopIndex;
+              columnIndex++
+            ) {
+              stickyRowColumns.push(
+                createElement(children, {
+                  columnIndex,
+                  data: itemData,
+                  isScrolling: useIsScrolling ? isScrolling : undefined,
+                  key: itemKey({
+                    columnIndex,
+                    data: itemData,
+                    rowIndex: stickyRows[stickRowIndex],
+                  }),
+                  rowIndex: stickyRows[stickRowIndex],
+                  style: this._getItemStyle(0, columnIndex),
+                })
+              );
+            }
+
+            stickyRowItems.push(stickyRowColumns);
           }
         }
       }
@@ -450,6 +497,32 @@ export default function createGridComponent({
         this.props,
         this._instanceProps
       );
+
+      if (stickyRowItems.length) {
+        const topLeftStyle = this._getItemStyle(0, 0);
+
+        for (
+          let stickRowIndex = 0;
+          stickRowIndex < stickyRowItems.length;
+          stickRowIndex++
+        ) {
+          items.push(
+            createElement(stickyRowsElementType || 'div', {
+              children: stickyRowItems[stickRowIndex],
+              key: `sticky-row-${stickRowIndex}`,
+              className:
+                stickyRowsClassNamePrefix && `${stickyRowsClassNamePrefix}-row`,
+              style: {
+                height: topLeftStyle.height,
+                width: estimatedTotalWidth,
+                position: 'sticky',
+                top: topLeftStyle.height * stickRowIndex,
+                zIndex: 1,
+              },
+            })
+          );
+        }
+      }
 
       return createElement(
         outerElementType || outerTagName || 'div',
@@ -907,4 +980,38 @@ const validateSharedProps = (
       );
     }
   }
+};
+
+const getRowIndex = (
+  current: number,
+  stickyRows: Array<number> = [],
+  index: number = 0
+): number => {
+  if (stickyRows.length === 0 || index >= stickyRows.length) {
+    return current;
+  }
+
+  const min = Math.min(...stickyRows);
+  const max = Math.max(...stickyRows);
+
+  if (current > max) {
+    return current + stickyRows.length - index;
+  }
+  if (current < min) {
+    return current;
+  }
+
+  if (current >= min && current <= max) {
+    if (current === stickyRows[index]) {
+      return getRowIndex(current + 1, stickyRows, index + 1);
+    }
+    if (current > stickyRows[index]) {
+      return getRowIndex(current + 1, stickyRows, index + 1);
+    }
+    if (current < stickyRows[index]) {
+      return getRowIndex(current, stickyRows, index + 1);
+    }
+  }
+
+  return current;
 };
