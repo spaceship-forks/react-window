@@ -98,6 +98,9 @@ export type Props<T> = {|
   stickyRowsClassNamePrefix?: string,
   stickyRowsElementType?: React$ElementType,
   stickyRows?: Array<number>,
+  stickyColumnClassNamePrefix?: string,
+  stickyColumnElementType?: React$ElementType,
+  stickyColumn?: boolean,
 |};
 
 type State = {|
@@ -411,6 +414,9 @@ export default function createGridComponent({
         stickyRowsClassNamePrefix,
         stickyRowsElementType,
         stickyRows = [],
+        stickyColumnClassNamePrefix,
+        stickyColumnElementType,
+        stickyColumn,
       } = this.props;
       const { isScrolling } = this.state;
 
@@ -422,6 +428,8 @@ export default function createGridComponent({
 
       const items = [];
       const stickyRowItems = [];
+      const stickyColumnItems = [];
+      const minColumnIndex = stickyColumn ? 1 : 0;
 
       if (columnCount > 0 && rowCount) {
         for (
@@ -433,7 +441,7 @@ export default function createGridComponent({
           let rowIdx = getRowIndex(rowIndex, stickyRows);
 
           for (
-            let columnIndex = columnStartIndex;
+            let columnIndex = Math.max(minColumnIndex, columnStartIndex);
             columnIndex <= columnStopIndex;
             columnIndex++
           ) {
@@ -462,7 +470,7 @@ export default function createGridComponent({
             let stickyRowColumns = [];
 
             for (
-              let columnIndex = columnStartIndex;
+              let columnIndex = Math.max(minColumnIndex, columnStartIndex);
               columnIndex <= columnStopIndex;
               columnIndex++
             ) {
@@ -482,7 +490,54 @@ export default function createGridComponent({
               );
             }
 
+            if (stickyColumn) {
+              stickyRowColumns.unshift(
+                createElement(children, {
+                  columnIndex: 0,
+                  data: itemData,
+                  isScrolling: useIsScrolling ? isScrolling : undefined,
+                  key: itemKey({
+                    columnIndex: 0,
+                    data: itemData,
+                    rowIndex: stickyRows[stickRowIndex],
+                  }),
+                  rowIndex: stickyRows[stickRowIndex],
+                  style: {
+                    ...this._getItemStyle(0, 0),
+                    position: 'sticky',
+                    zIndex: 1,
+                  },
+                })
+              );
+            }
+
             stickyRowItems.push(stickyRowColumns);
+          }
+        }
+
+        if (stickyColumn) {
+          for (
+            let rowIndex = rowStartIndex;
+            rowIndex <= rowStopIndex;
+            rowIndex++
+          ) {
+            // Remove the sticky rows from the column list
+            let rowIdx = getRowIndex(rowIndex, stickyRows);
+
+            stickyColumnItems.push(
+              createElement(children, {
+                columnIndex: 0,
+                data: itemData,
+                isScrolling: useIsScrolling ? isScrolling : undefined,
+                key: itemKey({
+                  columnIndex: 0,
+                  data: itemData,
+                  rowIndex: rowIdx,
+                }),
+                rowIndex: rowIdx,
+                style: this._getItemStyle(rowIndex + stickyRows.length, 0),
+              })
+            );
           }
         }
       }
@@ -490,7 +545,10 @@ export default function createGridComponent({
       // Read this value AFTER items have been created,
       // So their actual sizes (if variable) are taken into consideration.
       const estimatedTotalHeight = getEstimatedTotalHeight(
-        this.props,
+        {
+          ...this.props,
+          rowCount: this.props.rowCount + stickyRows.length,
+        },
         this._instanceProps
       );
       const estimatedTotalWidth = getEstimatedTotalWidth(
@@ -517,11 +575,34 @@ export default function createGridComponent({
                 width: estimatedTotalWidth,
                 position: 'sticky',
                 top: topLeftStyle.height * stickRowIndex,
-                zIndex: 1,
+                zIndex: 2,
               },
             })
           );
         }
+      }
+
+      if (stickyColumnItems.length) {
+        const topLeftStyle = this._getItemStyle(0, 0);
+
+        items.push(
+          createElement(stickyColumnElementType || 'div', {
+            children: stickyColumnItems,
+            key: 'sticky-column',
+            className:
+              stickyColumnClassNamePrefix &&
+              `${stickyColumnClassNamePrefix}-column`,
+            style: {
+              height: estimatedTotalHeight,
+              width: topLeftStyle.width,
+              position: 'sticky',
+              left: 0,
+              zIndex: 1,
+              transform: `translateY(-${topLeftStyle.height *
+                stickyRows.length}px)`,
+            },
+          })
+        );
       }
 
       return createElement(
