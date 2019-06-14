@@ -95,14 +95,11 @@ export type Props<T> = {|
   style?: Object,
   useIsScrolling: boolean,
   width: number,
-  stickyRowsClassNamePrefix?: string,
-  stickyRowsElementType?: React$ElementType,
+  stickyRowsElementType?: string | React$AbstractComponent<InnerProps, any>,
   stickyRows?: Array<number>,
-  stickyColumnClassNamePrefix?: string,
-  stickyColumnElementType?: React$ElementType,
+  stickyColumnElementType?: string | React$AbstractComponent<InnerProps, any>,
   stickyColumn?: boolean,
-  stickyFooterClassNamePrefix?: string,
-  stickyFooterElementType?: React$ElementType,
+  stickyFooterElementType?: string | React$AbstractComponent<InnerProps, any>,
   stickyFooter?: boolean,
 |};
 
@@ -414,13 +411,10 @@ export default function createGridComponent({
         style,
         useIsScrolling,
         width,
-        stickyRowsClassNamePrefix,
         stickyRowsElementType,
         stickyRows = [],
-        stickyColumnClassNamePrefix,
         stickyColumnElementType,
         stickyColumn,
-        stickyFooterClassNamePrefix,
         stickyFooterElementType,
         stickyFooter,
       } = this.props;
@@ -623,8 +617,6 @@ export default function createGridComponent({
             createElement(stickyRowsElementType || 'div', {
               children: stickyRowItems[stickRowIndex],
               key: `sticky-row-${stickRowIndex}`,
-              className:
-                stickyRowsClassNamePrefix && `${stickyRowsClassNamePrefix}-row`,
               style: {
                 height: topLeftStyle.height,
                 width: estimatedTotalWidth,
@@ -644,9 +636,6 @@ export default function createGridComponent({
           createElement(stickyFooterElementType || 'div', {
             children: stickyFooterItems,
             key: `sticky-footer`,
-            className:
-              stickyFooterClassNamePrefix &&
-              `${stickyFooterClassNamePrefix}-row`,
             style: {
               height: topLeftStyle.height,
               width: estimatedTotalWidth,
@@ -665,9 +654,6 @@ export default function createGridComponent({
           createElement(stickyColumnElementType || 'div', {
             children: stickyColumnItems,
             key: 'sticky-column',
-            className:
-              stickyColumnClassNamePrefix &&
-              `${stickyColumnClassNamePrefix}-column`,
             style: {
               height: estimatedTotalHeight,
               width: topLeftStyle.width,
