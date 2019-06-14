@@ -101,6 +101,9 @@ export type Props<T> = {|
   stickyColumnClassNamePrefix?: string,
   stickyColumnElementType?: React$ElementType,
   stickyColumn?: boolean,
+  stickyFooterClassNamePrefix?: string,
+  stickyFooterElementType?: React$ElementType,
+  stickyFooter?: boolean,
 |};
 
 type State = {|
@@ -417,6 +420,9 @@ export default function createGridComponent({
         stickyColumnClassNamePrefix,
         stickyColumnElementType,
         stickyColumn,
+        stickyFooterClassNamePrefix,
+        stickyFooterElementType,
+        stickyFooter,
       } = this.props;
       const { isScrolling } = this.state;
 
@@ -429,6 +435,8 @@ export default function createGridComponent({
       const items = [];
       const stickyRowItems = [];
       const stickyColumnItems = [];
+      const stickyFooterItems = [];
+      const stickyFooterRowCount = stickyFooter ? 1 : 0;
       const minColumnIndex = stickyColumn ? 1 : 0;
 
       if (columnCount > 0 && rowCount) {
@@ -540,6 +548,50 @@ export default function createGridComponent({
             );
           }
         }
+
+        if (stickyFooter) {
+          for (
+            let columnIndex = Math.max(minColumnIndex, columnStartIndex);
+            columnIndex <= columnStopIndex;
+            columnIndex++
+          ) {
+            stickyFooterItems.push(
+              createElement(children, {
+                columnIndex,
+                data: itemData,
+                isScrolling: useIsScrolling ? isScrolling : undefined,
+                key: itemKey({
+                  columnIndex,
+                  data: itemData,
+                  rowIndex: -1,
+                }),
+                rowIndex: -1,
+                style: this._getItemStyle(0, columnIndex),
+              })
+            );
+          }
+
+          if (stickyColumn) {
+            stickyFooterItems.unshift(
+              createElement(children, {
+                columnIndex: 0,
+                data: itemData,
+                isScrolling: useIsScrolling ? isScrolling : undefined,
+                key: itemKey({
+                  columnIndex: 0,
+                  data: itemData,
+                  rowIndex: -1,
+                }),
+                rowIndex: -1,
+                style: {
+                  ...this._getItemStyle(0, 0),
+                  position: 'sticky',
+                  zIndex: 1,
+                },
+              })
+            );
+          }
+        }
       }
 
       // Read this value AFTER items have been created,
@@ -547,7 +599,10 @@ export default function createGridComponent({
       const estimatedTotalHeight = getEstimatedTotalHeight(
         {
           ...this.props,
-          rowCount: this.props.rowCount + stickyRows.length,
+          // Since the main grid starts with an offset of height occupied by stickyrows,
+          // main grid needs to have more total height to render the items in the end properly.
+          rowCount:
+            this.props.rowCount + stickyRows.length + stickyFooterRowCount,
         },
         this._instanceProps
       );
@@ -582,6 +637,27 @@ export default function createGridComponent({
         }
       }
 
+      if (stickyFooterItems.length) {
+        const topLeftStyle = this._getItemStyle(0, 0);
+
+        items.push(
+          createElement(stickyFooterElementType || 'div', {
+            children: stickyFooterItems,
+            key: `sticky-footer`,
+            className:
+              stickyFooterClassNamePrefix &&
+              `${stickyFooterClassNamePrefix}-row`,
+            style: {
+              height: topLeftStyle.height,
+              width: estimatedTotalWidth,
+              position: 'sticky',
+              top: height - topLeftStyle.height,
+              zIndex: 2,
+            },
+          })
+        );
+      }
+
       if (stickyColumnItems.length) {
         const topLeftStyle = this._getItemStyle(0, 0);
 
@@ -599,7 +675,7 @@ export default function createGridComponent({
               left: 0,
               zIndex: 1,
               transform: `translateY(-${topLeftStyle.height *
-                stickyRows.length}px)`,
+                (stickyRows.length + stickyFooterRowCount)}px)`,
             },
           })
         );
