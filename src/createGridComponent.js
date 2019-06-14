@@ -95,6 +95,12 @@ export type Props<T> = {|
   style?: Object,
   useIsScrolling: boolean,
   width: number,
+  stickyRowsElementType?: string | React$AbstractComponent<InnerProps, any>,
+  stickyRows?: Array<number>,
+  stickyColumnElementType?: string | React$AbstractComponent<InnerProps, any>,
+  stickyColumn?: boolean,
+  stickyFooterElementType?: string | React$AbstractComponent<InnerProps, any>,
+  stickyFooter?: boolean,
 |};
 
 type State = {|
@@ -200,6 +206,8 @@ export default function createGridComponent({
       direction: 'ltr',
       itemData: undefined,
       useIsScrolling: false,
+      stickyColumn: false,
+      stickyFooter: false,
     };
 
     state: State = {
@@ -405,6 +413,12 @@ export default function createGridComponent({
         style,
         useIsScrolling,
         width,
+        stickyRowsElementType,
+        stickyRows = [],
+        stickyColumnElementType,
+        stickyColumn,
+        stickyFooterElementType,
+        stickyFooter,
       } = this.props;
       const { isScrolling } = this.state;
 
@@ -415,14 +429,23 @@ export default function createGridComponent({
       const [rowStartIndex, rowStopIndex] = this._getVerticalRangeToRender();
 
       const items = [];
+      const stickyRowItems = [];
+      const stickyColumnItems = [];
+      const stickyFooterItems = [];
+      const stickyFooterRowCount = stickyFooter ? 1 : 0;
+      const minColumnIndex = stickyColumn ? 1 : 0;
+
       if (columnCount > 0 && rowCount) {
         for (
           let rowIndex = rowStartIndex;
           rowIndex <= rowStopIndex;
           rowIndex++
         ) {
+          // Remove the sticky rows from main list
+          let rowIdx = getRowIndex(rowIndex, stickyRows);
+
           for (
-            let columnIndex = columnStartIndex;
+            let columnIndex = Math.max(minColumnIndex, columnStartIndex);
             columnIndex <= columnStopIndex;
             columnIndex++
           ) {
@@ -431,9 +454,136 @@ export default function createGridComponent({
                 columnIndex,
                 data: itemData,
                 isScrolling: useIsScrolling ? isScrolling : undefined,
-                key: itemKey({ columnIndex, data: itemData, rowIndex }),
-                rowIndex,
-                style: this._getItemStyle(rowIndex, columnIndex),
+                key: itemKey({ columnIndex, data: itemData, rowIndex: rowIdx }),
+                rowIndex: rowIdx,
+                style: this._getItemStyle(
+                  rowIndex + stickyRows.length,
+                  columnIndex
+                ),
+              })
+            );
+          }
+        }
+
+        if (stickyRows.length) {
+          for (
+            let stickRowIndex = 0;
+            stickRowIndex < stickyRows.length;
+            stickRowIndex++
+          ) {
+            let stickyRowColumns = [];
+
+            for (
+              let columnIndex = Math.max(minColumnIndex, columnStartIndex);
+              columnIndex <= columnStopIndex;
+              columnIndex++
+            ) {
+              stickyRowColumns.push(
+                createElement(children, {
+                  columnIndex,
+                  data: itemData,
+                  isScrolling: useIsScrolling ? isScrolling : undefined,
+                  key: itemKey({
+                    columnIndex,
+                    data: itemData,
+                    rowIndex: stickyRows[stickRowIndex],
+                  }),
+                  rowIndex: stickyRows[stickRowIndex],
+                  style: this._getItemStyle(0, columnIndex),
+                })
+              );
+            }
+
+            if (stickyColumn) {
+              stickyRowColumns.unshift(
+                createElement(children, {
+                  columnIndex: 0,
+                  data: itemData,
+                  isScrolling: useIsScrolling ? isScrolling : undefined,
+                  key: itemKey({
+                    columnIndex: 0,
+                    data: itemData,
+                    rowIndex: stickyRows[stickRowIndex],
+                  }),
+                  rowIndex: stickyRows[stickRowIndex],
+                  style: {
+                    ...this._getItemStyle(0, 0),
+                    position: 'sticky',
+                    zIndex: 1,
+                  },
+                })
+              );
+            }
+
+            stickyRowItems.push(stickyRowColumns);
+          }
+        }
+
+        if (stickyColumn) {
+          for (
+            let rowIndex = rowStartIndex;
+            rowIndex <= rowStopIndex;
+            rowIndex++
+          ) {
+            // Remove the sticky rows from the column list
+            let rowIdx = getRowIndex(rowIndex, stickyRows);
+
+            stickyColumnItems.push(
+              createElement(children, {
+                columnIndex: 0,
+                data: itemData,
+                isScrolling: useIsScrolling ? isScrolling : undefined,
+                key: itemKey({
+                  columnIndex: 0,
+                  data: itemData,
+                  rowIndex: rowIdx,
+                }),
+                rowIndex: rowIdx,
+                style: this._getItemStyle(rowIndex + stickyRows.length, 0),
+              })
+            );
+          }
+        }
+
+        if (stickyFooter) {
+          for (
+            let columnIndex = Math.max(minColumnIndex, columnStartIndex);
+            columnIndex <= columnStopIndex;
+            columnIndex++
+          ) {
+            stickyFooterItems.push(
+              createElement(children, {
+                columnIndex,
+                data: itemData,
+                isScrolling: useIsScrolling ? isScrolling : undefined,
+                key: itemKey({
+                  columnIndex,
+                  data: itemData,
+                  rowIndex: -1,
+                }),
+                rowIndex: -1,
+                style: this._getItemStyle(0, columnIndex),
+              })
+            );
+          }
+
+          if (stickyColumn) {
+            stickyFooterItems.unshift(
+              createElement(children, {
+                columnIndex: 0,
+                data: itemData,
+                isScrolling: useIsScrolling ? isScrolling : undefined,
+                key: itemKey({
+                  columnIndex: 0,
+                  data: itemData,
+                  rowIndex: -1,
+                }),
+                rowIndex: -1,
+                style: {
+                  ...this._getItemStyle(0, 0),
+                  position: 'sticky',
+                  zIndex: 1,
+                },
               })
             );
           }
@@ -443,13 +593,81 @@ export default function createGridComponent({
       // Read this value AFTER items have been created,
       // So their actual sizes (if variable) are taken into consideration.
       const estimatedTotalHeight = getEstimatedTotalHeight(
-        this.props,
+        {
+          ...this.props,
+          // Since the main grid starts with an offset of height occupied by stickyrows,
+          // main grid needs to have more total height to render the items in the end properly.
+          rowCount:
+            this.props.rowCount + stickyRows.length + stickyFooterRowCount,
+        },
         this._instanceProps
       );
       const estimatedTotalWidth = getEstimatedTotalWidth(
         this.props,
         this._instanceProps
       );
+
+      if (stickyRowItems.length) {
+        const topLeftStyle = this._getItemStyle(0, 0);
+
+        for (
+          let stickRowIndex = 0;
+          stickRowIndex < stickyRowItems.length;
+          stickRowIndex++
+        ) {
+          items.push(
+            createElement(stickyRowsElementType || 'div', {
+              children: stickyRowItems[stickRowIndex],
+              key: `sticky-row-${stickRowIndex}`,
+              style: {
+                height: topLeftStyle.height,
+                width: estimatedTotalWidth,
+                position: 'sticky',
+                top: topLeftStyle.height * stickRowIndex,
+                zIndex: 2,
+              },
+            })
+          );
+        }
+      }
+
+      if (stickyFooterItems.length) {
+        const topLeftStyle = this._getItemStyle(0, 0);
+
+        items.push(
+          createElement(stickyFooterElementType || 'div', {
+            children: stickyFooterItems,
+            key: `sticky-footer`,
+            style: {
+              height: topLeftStyle.height,
+              width: estimatedTotalWidth,
+              position: 'sticky',
+              top: height - topLeftStyle.height,
+              zIndex: 2,
+            },
+          })
+        );
+      }
+
+      if (stickyColumnItems.length) {
+        const topLeftStyle = this._getItemStyle(0, 0);
+
+        items.push(
+          createElement(stickyColumnElementType || 'div', {
+            children: stickyColumnItems,
+            key: 'sticky-column',
+            style: {
+              height: estimatedTotalHeight,
+              width: topLeftStyle.width,
+              position: 'sticky',
+              left: 0,
+              zIndex: 1,
+              transform: `translateY(-${topLeftStyle.height *
+                (stickyRows.length + stickyFooterRowCount)}px)`,
+            },
+          })
+        );
+      }
 
       return createElement(
         outerElementType || outerTagName || 'div',
@@ -907,4 +1125,38 @@ const validateSharedProps = (
       );
     }
   }
+};
+
+const getRowIndex = (
+  current: number,
+  stickyRows: Array<number> = [],
+  index: number = 0
+): number => {
+  if (stickyRows.length === 0 || index >= stickyRows.length) {
+    return current;
+  }
+
+  const min = Math.min(...stickyRows);
+  const max = Math.max(...stickyRows);
+
+  if (current > max) {
+    return current + stickyRows.length - index;
+  }
+  if (current < min) {
+    return current;
+  }
+
+  if (current >= min && current <= max) {
+    if (current === stickyRows[index]) {
+      return getRowIndex(current + 1, stickyRows, index + 1);
+    }
+    if (current > stickyRows[index]) {
+      return getRowIndex(current + 1, stickyRows, index + 1);
+    }
+    if (current < stickyRows[index]) {
+      return getRowIndex(current, stickyRows, index + 1);
+    }
+  }
+
+  return current;
 };
