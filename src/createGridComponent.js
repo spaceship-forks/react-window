@@ -206,6 +206,8 @@ export default function createGridComponent({
       direction: 'ltr',
       itemData: undefined,
       useIsScrolling: false,
+      stickyColumn: false,
+      stickyFooter: false,
     };
 
     state: State = {
